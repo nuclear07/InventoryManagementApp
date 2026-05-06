@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:smart_inventory/core/pdf_export_service.dart';
 import 'package:smart_inventory/core/connectivity_provider.dart';
+import 'package:smart_inventory/core/theme_mode_provider.dart';
 import 'package:smart_inventory/features/product/data/product_model.dart';
 import 'package:smart_inventory/features/product/providers/product_controller.dart';
+import 'package:smart_inventory/features/stock/providers/stock_controller.dart';
 import 'package:smart_inventory/shared/widgets/empty_state.dart';
 import 'package:smart_inventory/shared/widgets/stock_status_chip.dart';
 
@@ -16,11 +19,54 @@ class DashboardScreen extends ConsumerWidget {
     final productsState = ref.watch(productControllerProvider);
     final summary = ref.watch(summaryProvider);
     final online = ref.watch(connectivityProvider).valueOrNull ?? true;
+    final stockEntries = ref.watch(stockControllerProvider).valueOrNull ?? const [];
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Smart Inventory'),
         actions: [
+          IconButton(
+            tooltip: 'Export PDF',
+            onPressed: () async {
+              final products = ref.read(productControllerProvider).valueOrNull ?? const <ProductModel>[];
+              if (products.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('No products available to export.')),
+                );
+                return;
+              }
+              try {
+                await PdfExportService.exportInventoryReport(
+                  products: products,
+                  stockEntries: stockEntries,
+                );
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to export PDF: $e')),
+                  );
+                }
+              }
+            },
+            icon: const Icon(Icons.picture_as_pdf_outlined),
+          ),
+          PopupMenuButton<ThemeMode>(
+            tooltip: 'Theme',
+            icon: const Icon(Icons.palette_outlined),
+            onSelected: (mode) {
+              ref.read(themeModeProvider.notifier).state = mode;
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: ThemeMode.light,
+                child: Text('Light Mode'),
+              ),
+              PopupMenuItem(
+                value: ThemeMode.dark,
+                child: Text('Dark Mode'),
+              ),
+            ],
+          ),
           Row(
             children: [
               Icon(online ? Icons.cloud_done : Icons.cloud_off),
