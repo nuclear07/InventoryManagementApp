@@ -1,0 +1,941 @@
+================================================================================
+SMART INVENTORY APP - SOURCE CODE PART 2 (SCREENS & WIDGETS)
+================================================================================
+
+================================================================================
+FILE 12: lib/presentation/screens/dashboard_screen.dart
+================================================================================
+
+// COMMIT 2: UI Development — Dashboard Screen
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:smart_inventory/core/theme/app_theme.dart';
+import 'package:smart_inventory/models/product_model.dart';
+import 'package:smart_inventory/presentation/widgets/stock_status_badge.dart';
+import 'package:smart_inventory/presentation/widgets/empty_state_widget.dart';
+import 'package:smart_inventory/providers/product_provider.dart';
+
+class DashboardScreen extends ConsumerStatefulWidget {
+  const DashboardScreen({Key? key}) : super(key: key);
+
+  @override
+  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends ConsumerState<DashboardScreen> {
+  @override
+  Widget build(BuildContext context) {
+    final productsAsync = ref.watch(allProductsProvider);
+    final lowStockCountAsync = ref.watch(lowStockCountProvider);
+    final outOfStockCountAsync = ref.watch(outOfStockCountProvider);
+    final recentlyUpdatedAsync = ref.watch(recentlyUpdatedProductsProvider);
+    final totalCountAsync = ref.watch(totalProductsCountProvider);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Smart Inventory'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.search),
+            onPressed: () => context.push('/search-filter'),
+          ),
+          IconButton(
+            icon: const Icon(Icons.history),
+            onPressed: () => context.push('/stock-history'),
+          ),
+        ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          ref.refresh(allProductsProvider);
+          ref.refresh(lowStockCountProvider);
+          ref.refresh(outOfStockCountProvider);
+          ref.refresh(recentlyUpdatedProductsProvider);
+          ref.refresh(totalProductsCountProvider);
+        },
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Summary Cards
+                totalCountAsync.when(
+                  data: (total) => SummaryCard(
+                    title: 'Total Products',
+                    value: total.toString(),
+                    icon: Icons.inventory_2,
+                    color: Colors.blue,
+                  ),
+                  loading: () => const SummaryCardSkeleton(),
+                  error: (err, stack) => const SizedBox.shrink(),
+                ),
+                const SizedBox(height: 12),
+                lowStockCountAsync.when(
+                  data: (count) => SummaryCard(
+                    title: 'Low Stock',
+                    value: count.toString(),
+                    icon: Icons.warning_amber,
+                    color: AppTheme.lowStockColor,
+                  ),
+                  loading: () => const SummaryCardSkeleton(),
+                  error: (err, stack) => const SizedBox.shrink(),
+                ),
+                const SizedBox(height: 12),
+                outOfStockCountAsync.when(
+                  data: (count) => SummaryCard(
+                    title: 'Out of Stock',
+                    value: count.toString(),
+                    icon: Icons.cancel,
+                    color: AppTheme.criticalStockColor,
+                  ),
+                  loading: () => const SummaryCardSkeleton(),
+                  error: (err, stack) => const SizedBox.shrink(),
+                ),
+                const SizedBox(height: 24),
+
+                // All Products Section
+                Text(
+                  'All Products',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 12),
+                productsAsync.when(
+                  data: (products) {
+                    if (products.isEmpty) {
+                      return EmptyStateWidget(
+                        icon: Icons.inventory,
+                        title: 'No Products',
+                        message: 'Add your first product to get started!',
+                        onAction: () => context.push('/product-management'),
+                        actionLabel: 'Add Product',
+                      );
+                    }
+                    return Column(
+                      children: List.generate(
+                        products.length,
+                        (index) => ProductListTile(product: products[index]),
+                      ),
+                    );
+                  },
+                  loading: () => const Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                  error: (err, stack) => Center(
+                    child: Text('Error: $err'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => context.push('/product-management'),
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+}
+
+class SummaryCard extends StatelessWidget {
+  final String title;
+  final String value;
+  final IconData icon;
+  final Color color;
+
+  const SummaryCard({
+    Key? key,
+    required this.title,
+    required this.value,
+    required this.icon,
+    required this.color,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: color, size: 32),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    value,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class SummaryCardSkeleton extends StatelessWidget {
+  const SummaryCardSkeleton({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Row(
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 80,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: 50,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class ProductListTile extends StatelessWidget {
+  final ProductModel product;
+
+  const ProductListTile({
+    Key? key,
+    required this.product,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final status = product.getStockStatus();
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: ListTile(
+        leading: StockStatusBadge(status: status),
+        title: Text(product.name),
+        subtitle: Text('Qty: ${product.quantityAvailable} | Category: ${product.category.name}'),
+        trailing: IconButton(
+          icon: const Icon(Icons.edit),
+          onPressed: () => context.push('/product-management?id=${product.id}'),
+        ),
+      ),
+    );
+  }
+}
+
+
+================================================================================
+FILE 13: lib/presentation/screens/product_management_screen.dart
+================================================================================
+
+// COMMIT 2: UI Development — Product Management Screen
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:smart_inventory/data/repositories/product_repository.dart';
+import 'package:smart_inventory/models/product_model.dart';
+import 'package:smart_inventory/presentation/widgets/product_form.dart';
+import 'package:smart_inventory/providers/product_provider.dart';
+
+class ProductManagementScreen extends ConsumerStatefulWidget {
+  final String? productId;
+
+  const ProductManagementScreen({
+    Key? key,
+    this.productId,
+  }) : super(key: key);
+
+  @override
+  ConsumerState<ProductManagementScreen> createState() => 
+      _ProductManagementScreenState();
+}
+
+class _ProductManagementScreenState extends ConsumerState<ProductManagementScreen> {
+  ProductModel? _product;
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.productId != null) {
+      _loadProduct();
+    }
+  }
+
+  Future<void> _loadProduct() async {
+    setState(() => _isLoading = true);
+    try {
+      final repo = ProductRepository();
+      await repo.init();
+      final product = repo.getProduct(widget.productId!);
+      setState(() => _product = product);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading product: $e')),
+        );
+      }
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_product == null ? 'Add Product' : 'Edit Product'),
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16.0),
+              child: ProductForm(
+                product: _product,
+                onSuccess: () {
+                  ref.refresh(allProductsProvider);
+                  ref.refresh(totalProductsCountProvider);
+                  ref.refresh(lowStockCountProvider);
+                  ref.refresh(outOfStockCountProvider);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        _product == null
+                            ? 'Product added successfully!'
+                            : 'Product updated successfully!',
+                      ),
+                    ),
+                  );
+                  context.pop();
+                },
+                onDelete: () {
+                  ref.refresh(allProductsProvider);
+                  ref.refresh(totalProductsCountProvider);
+                  ref.refresh(lowStockCountProvider);
+                  ref.refresh(outOfStockCountProvider);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Product deleted successfully!')),
+                  );
+                  context.pop();
+                },
+              ),
+            ),
+    );
+  }
+}
+
+
+================================================================================
+FILE 14: lib/presentation/screens/stock_update_screen.dart
+================================================================================
+
+// COMMIT 2: UI Development — Stock Update Screen
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:smart_inventory/core/theme/app_theme.dart';
+import 'package:smart_inventory/core/utils/validators.dart';
+import 'package:smart_inventory/data/repositories/product_repository.dart';
+import 'package:smart_inventory/models/product_model.dart';
+import 'package:smart_inventory/models/stock_entry_model.dart';
+import 'package:smart_inventory/providers/product_provider.dart';
+import 'package:smart_inventory/providers/stock_provider.dart';
+
+class StockUpdateScreen extends ConsumerStatefulWidget {
+  const StockUpdateScreen({Key? key}) : super(key: key);
+
+  @override
+  ConsumerState<StockUpdateScreen> createState() => _StockUpdateScreenState();
+}
+
+class _StockUpdateScreenState extends ConsumerState<StockUpdateScreen> {
+  final _formKey = GlobalKey<FormState>();
+  
+  ProductModel? _selectedProduct;
+  StockEntryType _type = StockEntryType.stockIn;
+  late TextEditingController _quantityController;
+  late TextEditingController _noteController;
+  List<ProductModel> _products = [];
+  bool _isLoading = false;
+  bool _isSubmitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _quantityController = TextEditingController();
+    _noteController = TextEditingController();
+    _loadProducts();
+  }
+
+  @override
+  void dispose() {
+    _quantityController.dispose();
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadProducts() async {
+    setState(() => _isLoading = true);
+    try {
+      final repo = ProductRepository();
+      await repo.init();
+      final products = repo.getAllProducts();
+      setState(() => _products = products);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading products: $e')),
+        );
+      }
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _submitStockUpdate() async {
+    if (!_formKey.currentState!.validate() || _selectedProduct == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please fill all required fields')),
+      );
+      return;
+    }
+
+    final quantity = int.parse(_quantityController.text);
+
+    // Validation for stock out
+    if (_type == StockEntryType.stockOut &&
+        quantity > _selectedProduct!.quantityAvailable) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              'Cannot reduce stock. Available: ${_selectedProduct!.quantityAvailable}'),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      await ref.read(updateStockProvider(
+        (
+          productId: _selectedProduct!.id,
+          type: _type,
+          quantity: quantity,
+          note: _noteController.text.isEmpty ? null : _noteController.text,
+        ),
+      ).future);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Stock updated successfully!')),
+        );
+        _quantityController.clear();
+        _noteController.clear();
+        setState(() => _selectedProduct = null);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    } finally {
+      setState(() => _isSubmitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Stock Update'),
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16.0),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Select Product',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<ProductModel>(
+                      value: _selectedProduct,
+                      hint: const Text('Choose a product'),
+                      items: _products.map((product) {
+                        return DropdownMenuItem(
+                          value: product,
+                          child: Text(product.name),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        setState(() => _selectedProduct = value);
+                      },
+                      decoration: InputDecoration(
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      'Stock Entry Type',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    SegmentedButton<StockEntryType>(
+                      segments: const [
+                        ButtonSegment(
+                          value: StockEntryType.stockIn,
+                          label: Text('Stock In'),
+                          icon: Icon(Icons.add_circle),
+                        ),
+                        ButtonSegment(
+                          value: StockEntryType.stockOut,
+                          label: Text('Stock Out'),
+                          icon: Icon(Icons.remove_circle),
+                        ),
+                      ],
+                      selected: {_type},
+                      onSelectionChanged: (value) {
+                        setState(() => _type = value.first);
+                      },
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      'Quantity',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: _quantityController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        hintText: 'Enter quantity',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      validator: Validators.validateStock,
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      'Note (Optional)',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: _noteController,
+                      maxLines: 3,
+                      decoration: InputDecoration(
+                        hintText: 'Add a note...',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        onPressed: _isSubmitting ? null : _submitStockUpdate,
+                        child: _isSubmitting
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text('Update Stock'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+    );
+  }
+}
+
+
+================================================================================
+FILE 15: lib/presentation/screens/stock_history_screen.dart
+================================================================================
+
+// COMMIT 2: UI Development — Stock History Screen
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:smart_inventory/core/theme/app_theme.dart';
+import 'package:smart_inventory/models/stock_entry_model.dart';
+import 'package:smart_inventory/presentation/widgets/empty_state_widget.dart';
+import 'package:smart_inventory/providers/stock_provider.dart';
+
+class StockHistoryScreen extends ConsumerWidget {
+  const StockHistoryScreen({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final entriesAsync = ref.watch(allStockEntriesProvider);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Stock History'),
+      ),
+      body: entriesAsync.when(
+        data: (entries) {
+          if (entries.isEmpty) {
+            return EmptyStateWidget(
+              icon: Icons.history,
+              title: 'No Stock History',
+              message: 'No stock entries yet. Start by updating product stock!',
+            );
+          }
+
+          // Sort by most recent first
+          final sorted = entries..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+          return ListView.builder(
+            itemCount: sorted.length,
+            itemBuilder: (context, index) {
+              final entry = sorted[index];
+              return StockHistoryTile(entry: entry);
+            },
+          );
+        },
+        loading: () => const Center(
+          child: CircularProgressIndicator(),
+        ),
+        error: (err, stack) => Center(
+          child: Text('Error: $err'),
+        ),
+      ),
+    );
+  }
+}
+
+class StockHistoryTile extends StatelessWidget {
+  final StockEntryModel entry;
+
+  const StockHistoryTile({
+    Key? key,
+    required this.entry,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final isStockIn = entry.type == StockEntryType.stockIn;
+    final bgColor = isStockIn
+        ? AppTheme.normalStockColor.withOpacity(0.1)
+        : AppTheme.criticalStockColor.withOpacity(0.1);
+    final textColor =
+        isStockIn ? AppTheme.normalStockColor : AppTheme.criticalStockColor;
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: ListTile(
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(
+            isStockIn ? Icons.add_circle : Icons.remove_circle,
+            color: textColor,
+          ),
+        ),
+        title: Text(entry.productName),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(entry.formattedDate),
+            if (entry.note != null && entry.note!.isNotEmpty)
+              Text(
+                'Note: ${entry.note}',
+                style: const TextStyle(fontStyle: FontStyle.italic),
+              ),
+          ],
+        ),
+        trailing: Text(
+          '${isStockIn ? '+' : '-'}${entry.quantity}',
+          style: TextStyle(
+            color: textColor,
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+================================================================================
+FILE 16: lib/presentation/screens/search_filter_screen.dart
+================================================================================
+
+// COMMIT 2: UI Development — Search & Filter Screen
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:smart_inventory/models/product_model.dart';
+import 'package:smart_inventory/presentation/widgets/stock_status_badge.dart';
+import 'package:smart_inventory/presentation/widgets/empty_state_widget.dart';
+import 'package:smart_inventory/providers/product_provider.dart';
+
+class SearchFilterScreen extends ConsumerStatefulWidget {
+  const SearchFilterScreen({Key? key}) : super(key: key);
+
+  @override
+  ConsumerState<SearchFilterScreen> createState() => _SearchFilterScreenState();
+}
+
+class _SearchFilterScreenState extends ConsumerState<SearchFilterScreen> {
+  late TextEditingController _searchController;
+  ProductCategory? _selectedCategory;
+  StockStatus? _selectedStatus;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final searchQuery = _searchController.text;
+    final searchAsync = ref.watch(productSearchProvider(searchQuery));
+    final allProductsAsync = ref.watch(allProductsProvider);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Search & Filter'),
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Search Bar
+                SearchBar(
+                  controller: _searchController,
+                  hintText: 'Search products...',
+                  onChanged: (value) => setState(() {}),
+                ),
+                const SizedBox(height: 16),
+
+                // Category Filter
+                Text(
+                  'Category',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    FilterChip(
+                      label: const Text('All'),
+                      selected: _selectedCategory == null,
+                      onSelected: (selected) {
+                        setState(() =>
+                            _selectedCategory = selected ? null : _selectedCategory);
+                      },
+                    ),
+                    ...ProductCategory.values.map((cat) {
+                      return FilterChip(
+                        label: Text(_getCategoryLabel(cat)),
+                        selected: _selectedCategory == cat,
+                        onSelected: (selected) {
+                          setState(() =>
+                              _selectedCategory = selected ? cat : null);
+                        },
+                      );
+                    }),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // Stock Status Filter
+                Text(
+                  'Stock Status',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    FilterChip(
+                      label: const Text('All'),
+                      selected: _selectedStatus == null,
+                      onSelected: (selected) {
+                        setState(() => _selectedStatus = null);
+                      },
+                    ),
+                    FilterChip(
+                      label: const Text('Normal'),
+                      selected: _selectedStatus == StockStatus.normal,
+                      onSelected: (selected) {
+                        setState(() =>
+                            _selectedStatus = selected ? StockStatus.normal : null);
+                      },
+                    ),
+                    FilterChip(
+                      label: const Text('Low'),
+                      selected: _selectedStatus == StockStatus.low,
+                      onSelected: (selected) {
+                        setState(() =>
+                            _selectedStatus = selected ? StockStatus.low : null);
+                      },
+                    ),
+                    FilterChip(
+                      label: const Text('Critical'),
+                      selected: _selectedStatus == StockStatus.critical,
+                      onSelected: (selected) {
+                        setState(() => _selectedStatus =
+                            selected ? StockStatus.critical : null);
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: searchAsync.when(
+              data: (products) {
+                // Apply filters
+                var filtered = products;
+
+                if (_selectedCategory != null) {
+                  filtered = filtered
+                      .where((p) => p.category == _selectedCategory)
+                      .toList();
+                }
+
+                if (_selectedStatus != null) {
+                  filtered = filtered
+                      .where((p) => p.getStockStatus() == _selectedStatus)
+                      .toList();
+                }
+
+                if (filtered.isEmpty) {
+                  return EmptyStateWidget(
+                    icon: Icons.search,
+                    title: 'No Results',
+                    message: 'Try adjusting your search or filters',
+                  );
+                }
+
+                return ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: filtered.length,
+                  itemBuilder: (context, index) {
+                    final product = filtered[index];
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: ListTile(
+                        leading: StockStatusBadge(status: product.getStockStatus()),
+                        title: Text(product.name),
+                        subtitle: Text(
+                            'Qty: ${product.quantityAvailable} | ${_getCategoryLabel(product.category)}'),
+                      ),
+                    );
+                  },
+                );
+              },
+              loading: () => const Center(
+                child: CircularProgressIndicator(),
+              ),
+              error: (err, stack) => Center(
+                child: Text('Error: $err'),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getCategoryLabel(ProductCategory category) {
+    switch (category) {
+      case ProductCategory.electronics:
+        return 'Electronics';
+      case ProductCategory.stationery:
+        return 'Stationery';
+      case ProductCategory.labEquipment:
+        return 'Lab Equipment';
+      case ProductCategory.food:
+        return 'Food';
+      case ProductCategory.other:
+        return 'Other';
+    }
+  }
+}
+
+
+================================================================================
+[CONTINUED IN PART 3 - WIDGETS]
+================================================================================

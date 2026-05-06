@@ -1,0 +1,734 @@
+================================================================================
+SMART INVENTORY APP - ALL SOURCE CODE
+================================================================================
+
+This document contains all the Dart source code for the Smart Inventory app.
+Copy each section into its corresponding file in your project.
+
+================================================================================
+FILE 1: lib/main.dart
+================================================================================
+
+// COMMIT 1: Project Initialization — Main entry point
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:smart_inventory/core/theme/app_theme.dart';
+import 'package:smart_inventory/models/product_model.dart';
+import 'package:smart_inventory/models/stock_entry_model.dart';
+import 'package:smart_inventory/presentation/routes/app_router.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Hive
+  await Hive.initFlutter();
+
+  // Register Hive Adapters
+  Hive.registerAdapter(ProductModelAdapter());
+  Hive.registerAdapter(StockEntryModelAdapter());
+
+  // Open Hive boxes
+  await Hive.openBox<ProductModel>('products');
+  await Hive.openBox<StockEntryModel>('stock_entries');
+
+  runApp(
+    const ProviderScope(
+      child: SmartInventoryApp(),
+    ),
+  );
+}
+
+class SmartInventoryApp extends ConsumerWidget {
+  const SmartInventoryApp({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final appRouter = ref.watch(appRouterProvider);
+
+    return MaterialApp.router(
+      title: 'Smart Inventory',
+      theme: AppTheme.lightTheme,
+      routerConfig: appRouter,
+      debugShowCheckedModeBanner: false,
+    );
+  }
+}
+
+
+================================================================================
+FILE 2: lib/models/product_model.dart
+================================================================================
+
+// COMMIT 1: Project Initialization — Product Model
+import 'package:hive/hive.dart';
+
+part 'product_model.g.dart';
+
+enum ProductCategory {
+  electronics,
+  stationery,
+  labEquipment,
+  food,
+  other,
+}
+
+@HiveType(typeId: 0)
+class ProductModel extends HiveObject {
+  @HiveField(0)
+  final String id;
+
+  @HiveField(1)
+  String name;
+
+  @HiveField(2)
+  ProductCategory category;
+
+  @HiveField(3)
+  int quantityAvailable;
+
+  @HiveField(4)
+  int minimumThreshold;
+
+  @HiveField(5)
+  DateTime createdAt;
+
+  @HiveField(6)
+  DateTime updatedAt;
+
+  ProductModel({
+    required this.id,
+    required this.name,
+    required this.category,
+    required this.quantityAvailable,
+    required this.minimumThreshold,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  /// Get stock status based on quantity available
+  StockStatus getStockStatus() {
+    if (quantityAvailable == 0) {
+      return StockStatus.critical;
+    } else if (quantityAvailable <= minimumThreshold) {
+      return StockStatus.low;
+    } else {
+      return StockStatus.normal;
+    }
+  }
+
+  ProductModel copyWith({
+    String? id,
+    String? name,
+    ProductCategory? category,
+    int? quantityAvailable,
+    int? minimumThreshold,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) {
+    return ProductModel(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      category: category ?? this.category,
+      quantityAvailable: quantityAvailable ?? this.quantityAvailable,
+      minimumThreshold: minimumThreshold ?? this.minimumThreshold,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return 'ProductModel(id: $id, name: $name, quantity: $quantityAvailable, threshold: $minimumThreshold)';
+  }
+}
+
+enum StockStatus { normal, low, critical }
+
+
+================================================================================
+FILE 3: lib/models/stock_entry_model.dart
+================================================================================
+
+// COMMIT 1: Project Initialization — Stock Entry Model
+import 'package:hive/hive.dart';
+
+part 'stock_entry_model.g.dart';
+
+enum StockEntryType { stockIn, stockOut }
+
+@HiveType(typeId: 1)
+class StockEntryModel extends HiveObject {
+  @HiveField(0)
+  final String id;
+
+  @HiveField(1)
+  final String productId;
+
+  @HiveField(2)
+  final StockEntryType type;
+
+  @HiveField(3)
+  final int quantity;
+
+  @HiveField(4)
+  final DateTime timestamp;
+
+  @HiveField(5)
+  final String? note;
+
+  @HiveField(6)
+  final String productName;
+
+  StockEntryModel({
+    required this.id,
+    required this.productId,
+    required this.type,
+    required this.quantity,
+    required this.timestamp,
+    this.note,
+    required this.productName,
+  });
+
+  String get typeLabel => type == StockEntryType.stockIn ? 'Stock In' : 'Stock Out';
+
+  String get formattedDate {
+    return '${timestamp.day.toString().padLeft(2, '0')} '
+        '${_getMonthName(timestamp.month)} '
+        '${timestamp.year}, '
+        '${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')} '
+        '${timestamp.hour >= 12 ? 'PM' : 'AM'}';
+  }
+
+  static String _getMonthName(int month) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return months[month - 1];
+  }
+
+  StockEntryModel copyWith({
+    String? id,
+    String? productId,
+    StockEntryType? type,
+    int? quantity,
+    DateTime? timestamp,
+    String? note,
+    String? productName,
+  }) {
+    return StockEntryModel(
+      id: id ?? this.id,
+      productId: productId ?? this.productId,
+      type: type ?? this.type,
+      quantity: quantity ?? this.quantity,
+      timestamp: timestamp ?? this.timestamp,
+      note: note ?? this.note,
+      productName: productName ?? this.productName,
+    );
+  }
+
+  @override
+  String toString() {
+    return 'StockEntryModel(id: $id, type: $type, quantity: $quantity, product: $productName)';
+  }
+}
+
+
+================================================================================
+FILE 4: lib/core/constants/app_constants.dart
+================================================================================
+
+// App Constants
+class AppConstants {
+  // Hive Box Names
+  static const String productsBoxName = 'products';
+  static const String stockEntriesBoxName = 'stock_entries';
+
+  // Product Categories Display
+  static const Map<String, String> categoryLabels = {
+    'electronics': 'Electronics',
+    'stationery': 'Stationery',
+    'labEquipment': 'Lab Equipment',
+    'food': 'Food',
+    'other': 'Other',
+  };
+
+  // Route Names
+  static const String dashboardRoute = '/';
+  static const String productManagementRoute = '/product-management';
+  static const String stockUpdateRoute = '/stock-update';
+  static const String stockHistoryRoute = '/stock-history';
+  static const String searchFilterRoute = '/search-filter';
+
+  // API Timeouts
+  static const Duration apiTimeout = Duration(seconds: 30);
+
+  // Validation Messages
+  static const String emptyProductName = 'Product name cannot be empty';
+  static const String invalidQuantity = 'Quantity must be greater than 0';
+  static const String invalidThreshold = 'Threshold must be non-negative';
+  static const String thresholdGreaterThanQuantity = 'Threshold cannot exceed quantity';
+  static const String successProductAdded = 'Product added successfully';
+  static const String successProductUpdated = 'Product updated successfully';
+  static const String successStockUpdated = 'Stock updated successfully';
+  static const String errorCriticalStock = 'Cannot reduce stock below 0';
+}
+
+
+================================================================================
+FILE 5: lib/core/theme/app_theme.dart
+================================================================================
+
+// COMMIT 2: UI Development — App Theme
+import 'package:flutter/material.dart';
+
+class AppTheme {
+  static final ThemeData lightTheme = ThemeData(
+    useMaterial3: true,
+    brightness: Brightness.light,
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: const Color(0xFF2196F3),
+      brightness: Brightness.light,
+    ),
+    appBarTheme: AppBarTheme(
+      elevation: 2,
+      backgroundColor: const Color(0xFF2196F3),
+      foregroundColor: Colors.white,
+      titleTextStyle: const TextStyle(
+        fontSize: 20,
+        fontWeight: FontWeight.bold,
+        color: Colors.white,
+      ),
+    ),
+    cardTheme: CardTheme(
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      filled: true,
+      fillColor: Colors.grey.shade50,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    ),
+    floatingActionButtonTheme: FloatingActionButtonThemeData(
+      backgroundColor: const Color(0xFF2196F3),
+      foregroundColor: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+    ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: const Color(0xFF2196F3),
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+      ),
+    ),
+  );
+
+  // Color Indicators
+  static const Color normalStockColor = Color(0xFF4CAF50); // Green
+  static const Color lowStockColor = Color(0xFFFFA500);    // Amber/Orange
+  static const Color criticalStockColor = Color(0xFFF44336); // Red
+
+  static Color getStockStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'normal':
+        return normalStockColor;
+      case 'low':
+        return lowStockColor;
+      case 'critical':
+        return criticalStockColor;
+      default:
+        return Colors.grey;
+    }
+  }
+}
+
+
+================================================================================
+FILE 6: lib/core/utils/validators.dart
+================================================================================
+
+// Input Validators
+class Validators {
+  static String? validateProductName(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Product name cannot be empty';
+    }
+    if (value.length < 2) {
+      return 'Product name must be at least 2 characters';
+    }
+    if (value.length > 100) {
+      return 'Product name cannot exceed 100 characters';
+    }
+    return null;
+  }
+
+  static String? validateQuantity(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Quantity cannot be empty';
+    }
+    final quantity = int.tryParse(value);
+    if (quantity == null) {
+      return 'Quantity must be a valid number';
+    }
+    if (quantity < 0) {
+      return 'Quantity cannot be negative';
+    }
+    return null;
+  }
+
+  static String? validateThreshold(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Threshold cannot be empty';
+    }
+    final threshold = int.tryParse(value);
+    if (threshold == null) {
+      return 'Threshold must be a valid number';
+    }
+    if (threshold < 0) {
+      return 'Threshold cannot be negative';
+    }
+    return null;
+  }
+
+  static String? validateStock(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Stock quantity cannot be empty';
+    }
+    final stock = int.tryParse(value);
+    if (stock == null || stock <= 0) {
+      return 'Stock quantity must be greater than 0';
+    }
+    return null;
+  }
+}
+
+
+================================================================================
+FILE 7: lib/data/repositories/product_repository.dart
+================================================================================
+
+// COMMIT 3: Core Logic — Product Repository
+import 'package:hive/hive.dart';
+import 'package:uuid/uuid.dart';
+import 'package:smart_inventory/models/product_model.dart';
+
+class ProductRepository {
+  static const String _boxName = 'products';
+  late Box<ProductModel> _box;
+
+  Future<void> init() async {
+    _box = Hive.box<ProductModel>(_boxName);
+  }
+
+  Future<ProductModel> addProduct({
+    required String name,
+    required ProductCategory category,
+    required int quantityAvailable,
+    required int minimumThreshold,
+  }) async {
+    final product = ProductModel(
+      id: const Uuid().v4(),
+      name: name,
+      category: category,
+      quantityAvailable: quantityAvailable,
+      minimumThreshold: minimumThreshold,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+
+    await _box.put(product.id, product);
+    return product;
+  }
+
+  Future<void> updateProduct(ProductModel product) async {
+    final updatedProduct = product.copyWith(
+      updatedAt: DateTime.now(),
+    );
+    await _box.put(updatedProduct.id, updatedProduct);
+  }
+
+  Future<void> deleteProduct(String productId) async {
+    await _box.delete(productId);
+  }
+
+  ProductModel? getProduct(String productId) {
+    return _box.get(productId);
+  }
+
+  List<ProductModel> getAllProducts() {
+    return _box.values.toList();
+  }
+
+  List<ProductModel> getProductsByCategory(ProductCategory category) {
+    return _box.values.where((p) => p.category == category).toList();
+  }
+
+  List<ProductModel> searchProducts(String query) {
+    return _box.values
+        .where((p) => p.name.toLowerCase().contains(query.toLowerCase()))
+        .toList();
+  }
+
+  int getLowStockCount() {
+    return _box.values
+        .where((p) => p.quantityAvailable <= p.minimumThreshold)
+        .length;
+  }
+
+  int getOutOfStockCount() {
+    return _box.values.where((p) => p.quantityAvailable == 0).length;
+  }
+
+  List<ProductModel> getRecentlyUpdated({int limit = 5}) {
+    final products = _box.values.toList();
+    products.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return products.take(limit).toList();
+  }
+}
+
+
+================================================================================
+FILE 8: lib/data/repositories/stock_entry_repository.dart
+================================================================================
+
+// COMMIT 3: Core Logic — Stock Entry Repository
+import 'package:hive/hive.dart';
+import 'package:uuid/uuid.dart';
+import 'package:smart_inventory/models/stock_entry_model.dart';
+
+class StockEntryRepository {
+  static const String _boxName = 'stock_entries';
+  late Box<StockEntryModel> _box;
+
+  Future<void> init() async {
+    _box = Hive.box<StockEntryModel>(_boxName);
+  }
+
+  Future<StockEntryModel> addStockEntry({
+    required String productId,
+    required StockEntryType type,
+    required int quantity,
+    required String productName,
+    String? note,
+  }) async {
+    final entry = StockEntryModel(
+      id: const Uuid().v4(),
+      productId: productId,
+      type: type,
+      quantity: quantity,
+      timestamp: DateTime.now(),
+      note: note,
+      productName: productName,
+    );
+
+    await _box.put(entry.id, entry);
+    return entry;
+  }
+
+  List<StockEntryModel> getAllEntries() {
+    return _box.values.toList();
+  }
+
+  List<StockEntryModel> getEntriesByProduct(String productId) {
+    return _box.values
+        .where((e) => e.productId == productId)
+        .toList()
+        .cast<StockEntryModel>();
+  }
+
+  List<StockEntryModel> getRecentEntries({int limit = 20}) {
+    final entries = _box.values.toList();
+    entries.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    return entries.take(limit).toList();
+  }
+
+  void deleteEntry(String entryId) {
+    _box.delete(entryId);
+  }
+}
+
+
+================================================================================
+FILE 9: lib/providers/product_provider.dart
+================================================================================
+
+// COMMIT 3: Core Logic — Product Provider (Riverpod)
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:smart_inventory/data/repositories/product_repository.dart';
+import 'package:smart_inventory/models/product_model.dart';
+
+final productRepositoryProvider = Provider((ref) => ProductRepository());
+
+final allProductsProvider = FutureProvider<List<ProductModel>>((ref) async {
+  final repo = ref.watch(productRepositoryProvider);
+  await repo.init();
+  return repo.getAllProducts();
+});
+
+final productsByCategoryProvider = 
+    FutureProvider.family<List<ProductModel>, ProductCategory>((ref, category) async {
+  final repo = ref.watch(productRepositoryProvider);
+  await repo.init();
+  return repo.getProductsByCategory(category);
+});
+
+final searchedProductsProvider = StateProvider<List<ProductModel>>((ref) => []);
+
+final productSearchProvider = 
+    FutureProvider.family<List<ProductModel>, String>((ref, query) async {
+  final repo = ref.watch(productRepositoryProvider);
+  await repo.init();
+  if (query.isEmpty) {
+    return repo.getAllProducts();
+  }
+  return repo.searchProducts(query);
+});
+
+final lowStockCountProvider = FutureProvider<int>((ref) async {
+  final repo = ref.watch(productRepositoryProvider);
+  await repo.init();
+  return repo.getLowStockCount();
+});
+
+final outOfStockCountProvider = FutureProvider<int>((ref) async {
+  final repo = ref.watch(productRepositoryProvider);
+  await repo.init();
+  return repo.getOutOfStockCount();
+});
+
+final recentlyUpdatedProductsProvider = FutureProvider<List<ProductModel>>((ref) async {
+  final repo = ref.watch(productRepositoryProvider);
+  await repo.init();
+  return repo.getRecentlyUpdated();
+});
+
+final totalProductsCountProvider = FutureProvider<int>((ref) async {
+  final repo = ref.watch(productRepositoryProvider);
+  await repo.init();
+  return repo.getAllProducts().length;
+});
+
+
+================================================================================
+FILE 10: lib/providers/stock_provider.dart
+================================================================================
+
+// COMMIT 3: Core Logic — Stock Provider (Riverpod)
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:smart_inventory/data/repositories/product_repository.dart';
+import 'package:smart_inventory/data/repositories/stock_entry_repository.dart';
+import 'package:smart_inventory/models/product_model.dart';
+import 'package:smart_inventory/models/stock_entry_model.dart';
+
+final stockEntryRepositoryProvider = Provider((ref) => StockEntryRepository());
+
+final allStockEntriesProvider = FutureProvider<List<StockEntryModel>>((ref) async {
+  final repo = ref.watch(stockEntryRepositoryProvider);
+  await repo.init();
+  return repo.getAllEntries();
+});
+
+final stockEntriesByProductProvider = 
+    FutureProvider.family<List<StockEntryModel>, String>((ref, productId) async {
+  final repo = ref.watch(stockEntryRepositoryProvider);
+  await repo.init();
+  return repo.getEntriesByProduct(productId);
+});
+
+final recentStockEntriesProvider = FutureProvider<List<StockEntryModel>>((ref) async {
+  final repo = ref.watch(stockEntryRepositoryProvider);
+  await repo.init();
+  return repo.getRecentEntries();
+});
+
+// Update stock logic
+final updateStockProvider = FutureProvider.family<void, 
+    ({String productId, StockEntryType type, int quantity, String? note})>((ref, params) async {
+  final productRepo = ref.watch(productRepositoryProvider);
+  final stockRepo = ref.watch(stockEntryRepositoryProvider);
+
+  await productRepo.init();
+  await stockRepo.init();
+
+  final product = productRepo.getProduct(params.productId);
+  if (product == null) throw Exception('Product not found');
+
+  if (params.type == StockEntryType.stockOut) {
+    if (product.quantityAvailable < params.quantity) {
+      throw Exception('Cannot reduce stock below 0. Available: ${product.quantityAvailable}');
+    }
+    product.quantityAvailable -= params.quantity;
+  } else {
+    product.quantityAvailable += params.quantity;
+  }
+
+  await productRepo.updateProduct(product);
+  await stockRepo.addStockEntry(
+    productId: product.id,
+    type: params.type,
+    quantity: params.quantity,
+    productName: product.name,
+    note: params.note,
+  );
+
+  ref.refresh(allProductsProvider);
+  ref.refresh(allStockEntriesProvider);
+});
+
+
+================================================================================
+FILE 11: lib/presentation/routes/app_router.dart
+================================================================================
+
+// COMMIT 2: UI Development — App Router
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:smart_inventory/presentation/screens/dashboard_screen.dart';
+import 'package:smart_inventory/presentation/screens/product_management_screen.dart';
+import 'package:smart_inventory/presentation/screens/stock_update_screen.dart';
+import 'package:smart_inventory/presentation/screens/stock_history_screen.dart';
+import 'package:smart_inventory/presentation/screens/search_filter_screen.dart';
+
+final appRouterProvider = Provider<GoRouter>((ref) {
+  return GoRouter(
+    initialLocation: '/',
+    routes: [
+      GoRoute(
+        path: '/',
+        builder: (context, state) => const DashboardScreen(),
+      ),
+      GoRoute(
+        path: '/product-management',
+        builder: (context, state) => const ProductManagementScreen(),
+      ),
+      GoRoute(
+        path: '/stock-update',
+        builder: (context, state) => const StockUpdateScreen(),
+      ),
+      GoRoute(
+        path: '/stock-history',
+        builder: (context, state) => const StockHistoryScreen(),
+      ),
+      GoRoute(
+        path: '/search-filter',
+        builder: (context, state) => const SearchFilterScreen(),
+      ),
+    ],
+  );
+});
+
+
+================================================================================
+[CONTINUED IN NEXT SECTION - UI SCREENS AND WIDGETS]
+================================================================================
+
+(Continue reading for screen implementations...)
